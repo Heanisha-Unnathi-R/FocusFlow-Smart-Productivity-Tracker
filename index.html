@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Focus Tracker Pro</title>
+
+<style>
+body {
+  margin: 0;
+  font-family: 'Segoe UI';
+  background: linear-gradient(135deg, #1f1c2c, #928dab);
+  color: white;
+}
+
+.container {
+  max-width: 700px;
+  margin: auto;
+  padding: 20px;
+}
+
+h1 { text-align: center; }
+
+.card {
+  background: rgba(255,255,255,0.1);
+  padding: 20px;
+  border-radius: 12px;
+  margin-top: 20px;
+}
+
+#timer {
+  font-size: 48px;
+  text-align: center;
+}
+
+button {
+  padding: 10px 15px;
+  margin: 5px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.start { background: #00c853; }
+.stop { background: #d50000; }
+.add { background: #2962ff; }
+
+input {
+  padding: 10px;
+  width: 65%;
+  border-radius: 6px;
+  border: none;
+}
+
+ul { list-style: none; padding: 0; }
+
+li {
+  padding: 10px;
+  margin: 5px 0;
+  background: rgba(255,255,255,0.1);
+  border-radius: 6px;
+}
+
+.stats {
+  display: flex;
+  justify-content: space-between;
+}
+
+.stat-box {
+  background: rgba(0,0,0,0.3);
+  padding: 10px;
+  border-radius: 8px;
+  width: 48%;
+  text-align: center;
+}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+<h1>🎯 Focus Tracker</h1>
+
+<div class="card">
+  <div id="timer">00:00:00</div>
+  <div style="text-align:center;">
+    <button class="start" onclick="startSession()">Start</button>
+    <button class="stop" onclick="stopSession()">Stop</button>
+  </div>
+</div>
+
+<div class="card stats">
+  <div class="stat-box">
+    <h3>Total Sessions</h3>
+    <p id="totalSessions">0</p>
+  </div>
+  <div class="stat-box">
+    <h3>Total Time</h3>
+    <p id="totalTime">00:00:00</p>
+  </div>
+</div>
+
+<div class="card">
+  <input type="text" id="distraction" placeholder="e.g Instagram">
+  <button class="add" onclick="addDistraction()">Add</button>
+</div>
+
+<div class="card">
+  <h3>📱 Distractions</h3>
+  <ul id="distractionList"></ul>
+
+  <h3>⏱ Sessions</h3>
+  <ul id="sessionList"></ul>
+</div>
+
+</div>
+
+<script>
+let startTime = null;
+let timerInterval = null;
+
+async function startSession() {
+  await fetch('/start', {method:'POST'});
+  startTime = new Date();
+  timerInterval = setInterval(updateTimer, 1000);
+}
+
+async function stopSession() {
+  await fetch('/stop', {method:'POST'});
+  clearInterval(timerInterval);
+  loadData();
+}
+
+function updateTimer() {
+  let diff = Math.floor((new Date() - startTime)/1000);
+  document.getElementById("timer").innerText = formatDuration(diff);
+}
+
+function formatDuration(sec) {
+  let h = String(Math.floor(sec/3600)).padStart(2,'0');
+  let m = String(Math.floor((sec%3600)/60)).padStart(2,'0');
+  let s = String(sec%60).padStart(2,'0');
+  return `${h}:${m}:${s}`;
+}
+
+async function addDistraction() {
+  let text = document.getElementById("distraction").value;
+  if (!text) return;
+
+  await fetch('/add_distraction', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({name:text})
+  });
+
+  document.getElementById("distraction").value = "";
+  loadData();
+}
+
+async function loadData() {
+  let res = await fetch('/data');
+  let data = await res.json();
+
+  let dList = document.getElementById("distractionList");
+  let sList = document.getElementById("sessionList");
+
+  dList.innerHTML = "";
+  sList.innerHTML = "";
+
+  let totalTime = 0;
+
+  data.distractions.forEach(d => {
+    dList.innerHTML += `<li>🚫 ${d[1]} (${formatTime(d[2])})</li>`;
+  });
+
+  data.sessions.forEach(s => {
+    let start = new Date(s[1]);
+    let end = s[2] ? new Date(s[2]) : new Date();
+    let duration = Math.floor((end - start)/1000);
+    totalTime += duration;
+
+    sList.innerHTML += `
+      <li>
+        🟢 ${formatTime(s[1])} → 🔴 ${s[2] ? formatTime(s[2]) : "Running"}
+        <br>⏳ ${formatDuration(duration)}
+      </li>
+    `;
+  });
+
+  document.getElementById("totalSessions").innerText = data.sessions.length;
+  document.getElementById("totalTime").innerText = formatDuration(totalTime);
+}
+
+function formatTime(time) {
+  return new Date(time).toLocaleTimeString();
+}
+
+setInterval(loadData, 3000);
+</script>
+
+</body>
+</html>
